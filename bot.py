@@ -1,4 +1,4 @@
-import os
+\\\import os
 import requests
 import time
 import random
@@ -7,19 +7,29 @@ import json
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+# ============================================
+# ENVIRONMENT VARIABLES
+# ============================================
 BOT1_TOKEN = os.environ.get("BOT1_TOKEN", "")
 BOT2_TOKEN = os.environ.get("BOT2_TOKEN", "")
 GROUP_ID = int(os.environ.get("GROUP_ID", "0"))
 
 if not BOT1_TOKEN or not BOT2_TOKEN or not GROUP_ID:
-    print("❌ ERROR: Set BOT1_TOKEN, BOT2_TOKEN, GROUP_ID")
+    print("ERROR: Set BOT1_TOKEN, BOT2_TOKEN, GROUP_ID in Render Environment")
     exit(1)
 
+# ============================================
+# RANGE: 31,799,674 → 34,652,654
+# ============================================
 BOT1_START = 34650554
 BOT1_END = 33226165
+
 BOT2_START = 33226164
 BOT2_END = 31799674
 
+# ============================================
+# PROGRESS
+# ============================================
 def load_progress(bot_name):
     file = f"progress_{bot_name}.json"
     if os.path.exists(file):
@@ -44,14 +54,20 @@ def log(bot_name, msg):
     with open(f"log_{bot_name}.txt", "a") as f:
         f.write(line + "\n")
 
+# ============================================
+# API CALL
+# ============================================
 def delete_chunk(token, chat_id, message_ids):
     url = f"https://api.telegram.org/bot{token}/deleteMessages"
     try:
         r = requests.post(url, json={"chat_id": chat_id, "message_ids": message_ids}, timeout=30)
         return r.json()
     except Exception as e:
-        return {"ok": False, "error": str(e), "code": 0}
+        return {"ok": False, "error": str(e)}
 
+# ============================================
+# MAIN BOT
+# ============================================
 def run_bot(token, start_id, end_id, bot_name):
     resume = load_progress(bot_name)
     if resume > 0 and resume <= start_id and resume >= end_id:
@@ -63,8 +79,8 @@ def run_bot(token, start_id, end_id, bot_name):
 
     total_ids = start_id - end_id + 1
     deleted = 0
-    calls = 0
     skipped = 0
+    calls = 0
     t0 = time.time()
 
     log(bot_name, f"Range: {start_id:,} → {end_id:,} ({total_ids:,} IDs)")
@@ -78,38 +94,27 @@ def run_bot(token, start_id, end_id, bot_name):
         result = delete_chunk(token, GROUP_ID, chunk)
         calls += 1
 
-        # ✅ SUCCESS
+        # SUCCESS
         if result and result.get("ok"):
             deleted += len(chunk)
             i -= 100
 
-        # ⏳ RATE LIMIT (429) = WAIT & RETRY SAME CHUNK
+        # RATE LIMIT (429) = WAIT & RETRY SAME CHUNK
         elif result and result.get("error_code") == 429:
             wait = result.get("parameters", {}).get("retry_after", 30)
-            log(bot_name, f"⏳ RateLimit: {wait}s")
-            if wait > 300:
-                log(bot_name, f"⚠️ Long wait, pausing 5min...")
-                time.sleep(300)
-            else:
-                time.sleep(wait + 5)
-            continue  # Retry same chunk
+            log(bot_name, f"RateLimit: {wait}s")
+            time.sleep(wait + 5)
+            continue  # Retry same chunk (i nahi badlega)
 
-        # ❌ 400 BAD REQUEST = SKIP CHUNK (IDs don't exist)
+        # 400 BAD REQUEST = SKIP (IDs don't exist)
         elif result and result.get("error_code") == 400:
             skipped += len(chunk)
-            if calls % 100 == 0:
-                log(bot_name, f"⚠️ Skip {chunk[0]}-{chunk[-1]} (not found)")
-            i -= 100  # Move to next chunk
+            i -= 100  # Aage badho
 
-        # ❌ OTHER ERROR = SKIP CHUNK
-        elif result and result.get("error"):
-            log(bot_name, f"⚠️ Skip {chunk[0]}: {result.get('error')}")
-            i -= 100
-
-        # Unknown
+        # ANY OTHER ERROR = SKIP
         else:
-            log(bot_name, f"⚠️ Unknown: {result}")
-            i -= 100
+            log(bot_name, f"Skip {chunk[0]}: {result}")
+            i -= 100  # Aage badho
 
         # Progress every 500 calls
         if calls % 500 == 0:
@@ -117,16 +122,19 @@ def run_bot(token, start_id, end_id, bot_name):
             speed = deleted / elapsed if elapsed > 0 else 0
             pct = (start_id - i) / total_ids * 100
             eta = (total_ids - (start_id - i)) / speed / 3600 if speed > 0 else 0
-            log(bot_name, f"📊 {i:,} ({pct:.1f}%) | Deleted: {deleted:,} | Skipped: {skipped:,} | ETA: {eta:.1f}h")
+            log(bot_name, f"Progress: {i:,} ({pct:.1f}%) | Deleted: {deleted:,} | Skipped: {skipped:,} | ETA: {eta:.1f}h")
             save_progress(bot_name, i, deleted)
 
-        # Delay: 1.5s + random
-        time.sleep(1.5 + random.uniform(0, 1.0))
+        # Delay: 1.0s + random 0-0.5s = 1.0-1.5s
+        time.sleep(1.0 + random.uniform(0, 0.5))
 
     save_progress(bot_name, i, deleted)
     elapsed = time.time() - t0
-    log(bot_name, f"✅ DONE! Deleted: {deleted:,} | Skipped: {skipped:,} | Time: {elapsed/3600:.1f}h")
+    log(bot_name, f"DONE! Deleted: {deleted:,} | Skipped: {skipped:,} | Time: {elapsed/3600:.1f}h")
 
+# ============================================
+# DUMMY SERVER (Render ko port chahiye)
+# ============================================
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -138,14 +146,16 @@ class DummyHandler(BaseHTTPRequestHandler):
 def start_server():
     port = int(os.environ.get("PORT", "10000"))
     server = HTTPServer(("0.0.0.0", port), DummyHandler)
-    print(f"🌐 Port {port}")
+    print(f"Server on port {port}")
     server.serve_forever()
 
+# ============================================
+# START
+# ============================================
 if __name__ == "__main__":
     print("=" * 60)
-    print("🚀 TELEGRAM DELETE - v3 (400=skip, 429=retry)")
+    print("TELEGRAM DELETE - 2 BOTS")
     print("=" * 60)
-    print(f"Group: {GROUP_ID}")
     print(f"Bot1: {BOT1_START:,} → {BOT1_END:,}")
     print(f"Bot2: {BOT2_START:,} → {BOT2_END:,}")
     print("=" * 60)
