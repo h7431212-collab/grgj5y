@@ -1,4 +1,4 @@
-\\\import os
+import os
 import requests
 import time
 import random
@@ -21,7 +21,7 @@ if not BOT1_TOKEN or not BOT2_TOKEN or not GROUP_ID:
 # ============================================
 # RANGE: 31,799,674 → 34,652,654
 # ============================================
-BOT1_START = 34650554
+BOT1_START = 34652654
 BOT1_END = 33226165
 
 BOT2_START = 33226164
