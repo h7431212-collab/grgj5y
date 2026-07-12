@@ -2,6 +2,7 @@ import os
 import requests
 import time
 import random
+import threading
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -12,7 +13,6 @@ if not BOT1_TOKEN or not GROUP_ID:
     print("ERROR: Set BOT1_TOKEN, GROUP_ID")
     exit(1)
 
-# Sirf 1 bot, pura range
 BOT_START = 34652705
 BOT_END = 31799674
 
@@ -41,26 +41,18 @@ def run_bot(token, start_id, end_id):
         
         result = delete_chunk(token, GROUP_ID, chunk)
         
-        # SUCCESS
         if result and result.get("ok"):
             deleted += len(chunk)
-        
-        # 400 = not found, skip
         elif result and result.get("error_code") == 400:
             skipped += len(chunk)
-        
-        # 429 = rate limit, wait & retry
         elif result and result.get("error_code") == 429:
             wait = result.get("parameters", {}).get("retry_after", 30)
             log(f"RateLimit: {wait}s")
             time.sleep(wait + 5)
-            continue  # Retry same chunk
-        
-        # Other error, skip
+            continue
         else:
             skipped += len(chunk)
         
-        # Log every 5 seconds
         now = time.time()
         if now - last_log >= 5:
             elapsed = now - t0
@@ -72,7 +64,6 @@ def run_bot(token, start_id, end_id):
             log(f"ID:{i} ({pct:.1f}%) | Del:{deleted} | Skip:{skipped} | Spd:{speed:.0f}/s | ETA:{eta:.1f}h")
             last_log = now
         
-        # 1.0s delay
         time.sleep(1.0)
 
     elapsed = time.time() - t0
