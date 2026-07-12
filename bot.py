@@ -13,7 +13,7 @@ if not BOT1_TOKEN or not GROUP_ID:
     print("ERROR: Set BOT1_TOKEN, GROUP_ID")
     exit(1)
 
-BOT_START = 34652654
+BOT_START = 34650554
 BOT_END = 31799674
 
 def log(msg):
@@ -28,6 +28,14 @@ def delete_chunk(token, chat_id, message_ids):
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+def delete_single(token, chat_id, msg_id):
+    url = f"https://api.telegram.org/bot{token}/deleteMessage"
+    try:
+        r = requests.post(url, json={"chat_id": chat_id, "message_id": msg_id}, timeout=10)
+        return r.json()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 def run_bot(token, start_id, end_id):
     log(f"Start: {start_id} → {end_id}")
 
@@ -36,40 +44,32 @@ def run_bot(token, start_id, end_id):
     t0 = time.time()
     last_log = time.time()
 
-    for i in range(start_id, end_id - 1, -100):
+    i = start_id
+    while i >= end_id:
         chunk = list(range(i, max(i - 100, end_id - 1), -1))
         
+        # Try bulk delete first
         result = delete_chunk(token, GROUP_ID, chunk)
         
-        # SUCCESS
+        # Bulk success
         if result and result.get("ok"):
             deleted += len(chunk)
+            i -= 100
         
-        # 400 = some IDs missing, check which ones deleted
-        elif result and result.get("error_code") == 400:
-            # Try deleting one by one to find valid ones
-            valid_deleted = 0
+        # Bulk failed - try single IDs
+        else:
+            single_deleted = 0
             for msg_id in chunk:
                 single_result = delete_single(token, GROUP_ID, msg_id)
+                
                 if single_result and single_result.get("ok"):
-                    valid_deleted += 1
                     deleted += 1
+                    single_deleted += 1
                 else:
                     skipped += 1
-                time.sleep(0.1)  # Fast single delete
             
-            log(f"Chunk {i}: Found {valid_deleted} valid, rest missing")
-        
-        # 429 = rate limit
-        elif result and result.get("error_code") == 429:
-            wait = result.get("parameters", {}).get("retry_after", 30)
-            log(f"RateLimit: {wait}s")
-            time.sleep(wait + 5)
-            continue
-        
-        # Other error
-        else:
-            skipped += len(chunk)
+            # Move forward regardless
+            i -= 100
         
         # Log every 5 seconds
         now = time.time()
@@ -83,18 +83,11 @@ def run_bot(token, start_id, end_id):
             log(f"ID:{i} ({pct:.1f}%) | Del:{deleted} | Skip:{skipped} | Spd:{speed:.0f}/s | ETA:{eta:.1f}h")
             last_log = now
         
+        # 0.5s delay
         time.sleep(0.5)
 
     elapsed = time.time() - t0
     log(f"DONE! Del:{deleted} | Skip:{skipped} | Time:{elapsed/3600:.1f}h")
-
-def delete_single(token, chat_id, msg_id):
-    url = f"https://api.telegram.org/bot{token}/deleteMessage"
-    try:
-        r = requests.post(url, json={"chat_id": chat_id, "message_id": msg_id}, timeout=10)
-        return r.json()
-    except:
-        return None
 
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -109,7 +102,7 @@ def start_server():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("TELEGRAM DELETE - 1 BOT")
+    print("TELEGRAM DELETE - BULK + SINGLE FALLBACK")
     print("=" * 60)
     print(f"Range: {BOT_START} → {BOT_END}")
     print("=" * 60)
