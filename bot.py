@@ -13,8 +13,8 @@ if not BOT1_TOKEN or not GROUP_ID:
     print("ERROR: Set BOT1_TOKEN, GROUP_ID")
     exit(1)
 
-BOT_START = 34650554
-BOT_END = 31799674
+BOT_START = 31799674
+BOT_END = 34650554
 
 def log(msg):
     line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
