@@ -13,7 +13,7 @@ if not BOT1_TOKEN or not GROUP_ID:
     exit(1)
 
 # Sirf 1 bot, pura range
-BOT_START = 34652654
+BOT_START = 34652705
 BOT_END = 31799674
 
 def log(msg):
