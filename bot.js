@@ -118,6 +118,7 @@ bot.command("ai", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx) => {
+  if (ctx.message.text.startsWith("/")) return;
   if (!(await shouldModerate(ctx))) return;
 
   try {
