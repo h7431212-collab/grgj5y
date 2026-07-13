@@ -100,7 +100,7 @@ bot.on("message:text", async (ctx) => {
 
     const { category } = await moderateMessage(msg.text, MISTRAL_API_KEY);
 
-    if (category === "severe") {
+    if (category === "severe" || category === "mild") {
       await ctx.deleteMessage();
 
       const warning = await ctx.reply(
