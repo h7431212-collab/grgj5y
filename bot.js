@@ -36,6 +36,44 @@ bot.catch((err) => {
   console.error("[bot] error:", err.error);
 });
 
+async function checkBlocked(text) {
+  const lower = text.toLowerCase();
+  const hit = OTHER_MSGS.find((w) => {
+    if (!w) return false;
+    const found = lower.includes(w);
+    if (found) console.log(`[blocked-word] match: "${w}" in "${lower}"`);
+    return found;
+  });
+  if (hit) return { blocked: true, reason: "word", hit };
+
+  const { category } = await moderateMessage(text, MISTRAL_API_KEY);
+  if (category === "severe") return { blocked: true, reason: "severe" };
+
+  return { blocked: false };
+}
+
+async function deleteAndWarn(ctx, firstName) {
+  await ctx.deleteMessage();
+  const warning = await ctx.reply(
+    `${WARNING_MESSAGE}\n— <i>${firstName}</i>`,
+    { parse_mode: "HTML" }
+  );
+  setTimeout(async () => {
+    try {
+      await bot.api.deleteMessage(ctx.chat.id, warning.message_id);
+    } catch {
+      /* warning already gone */
+    }
+  }, WARNING_TTL);
+}
+
+async function shouldModerate(ctx) {
+  if (ctx.chat.type === "private") return false;
+  if (ALLOWED_GROUP_IDS.length && !ALLOWED_GROUP_IDS.includes(String(ctx.chat.id))) return false;
+  if (ADMIN_IDS.includes(String(ctx.from.id))) return false;
+  return true;
+}
+
 bot.command("ping", async (ctx) => {
   await ctx.reply("pong 🏓");
 });
@@ -52,6 +90,22 @@ bot.command("ai", async (ctx) => {
     await ctx.reply("ask me something broski, like /ai how are you");
     return;
   }
+
+  if (await shouldModerate(ctx)) {
+    try {
+      const result = await checkBlocked(question);
+      if (result.blocked) {
+        await deleteAndWarn(ctx, ctx.from.first_name);
+        console.log(
+          `[blocked-ai] chat=${ctx.chat.id} user=${ctx.from.id} reason=${result.reason}`
+        );
+        return;
+      }
+    } catch (err) {
+      console.error(`[moderation] ai check skipped: ${err.message}`);
+    }
+  }
+
   try {
     const answer = await aiChat(question, MISTRAL_API_KEY);
     await ctx.reply(answer);
@@ -64,64 +118,18 @@ bot.command("ai", async (ctx) => {
 });
 
 bot.on("message:text", async (ctx) => {
-  const msg = ctx.message;
-
-  if (ctx.chat.type === "private") return;
-  if (ALLOWED_GROUP_IDS.length && !ALLOWED_GROUP_IDS.includes(String(msg.chat.id))) return;
-  if (ADMIN_IDS.includes(String(msg.from.id))) return;
+  if (!(await shouldModerate(ctx))) return;
 
   try {
-    const lower = msg.text.toLowerCase();
-    const hit = OTHER_MSGS.find((w) => {
-      if (!w) return false;
-      const found = lower.includes(w);
-      if (found) console.log(`[blocked-word] match: "${w}" in "${lower}"`);
-      return found;
-    });
-
-    if (hit) {
-      await ctx.deleteMessage();
-      const warning = await ctx.reply(
-        `${WARNING_MESSAGE}\n— <i>${msg.from.first_name}</i>`,
-        { parse_mode: "HTML" }
-      );
-      setTimeout(async () => {
-        try {
-          await bot.api.deleteMessage(ctx.chat.id, warning.message_id);
-        } catch {
-          /* warning already gone */
-        }
-      }, WARNING_TTL);
+    const result = await checkBlocked(ctx.message.text);
+    if (result.blocked) {
+      await deleteAndWarn(ctx, ctx.from.first_name);
       console.log(
-        `[blocked-word] chat=${ctx.chat.id} user=${msg.from.id} word="${hit}"`
-      );
-      return;
-    }
-
-    const { category } = await moderateMessage(msg.text, MISTRAL_API_KEY);
-
-    if (category === "severe") {
-      await ctx.deleteMessage();
-
-      const warning = await ctx.reply(
-        `${WARNING_MESSAGE}\n— <i>${msg.from.first_name}</i>`,
-        { parse_mode: "HTML" }
-      );
-
-      setTimeout(async () => {
-        try {
-          await bot.api.deleteMessage(ctx.chat.id, warning.message_id);
-        } catch {
-          /* warning already gone */
-        }
-      }, WARNING_TTL);
-
-      console.log(
-        `[moderated] chat=${ctx.chat.id} user=${msg.from.id}`
+        `[moderated] chat=${ctx.chat.id} user=${ctx.from.id} reason=${result.reason}`
       );
     }
   } catch (err) {
-    console.error(`[moderation] skipped message ${msg.message_id}: ${err.message}`);
+    console.error(`[moderation] skipped message: ${err.message}`);
   }
 });
 
