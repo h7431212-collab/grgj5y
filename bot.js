@@ -21,6 +21,10 @@ const OTHER_MSGS = (process.env.OTHER_MSGS || "")
   .map((w) => w.trim().toLowerCase())
   .filter(Boolean);
 
+console.log(`[config] OTHER_MSGS loaded: ${OTHER_MSGS.length ? JSON.stringify(OTHER_MSGS) : "(empty)"}`);
+console.log(`[config] ADMIN_IDS: ${JSON.stringify(ADMIN_IDS)}`);
+console.log(`[config] ALLOWED_GROUP_IDS: ${JSON.stringify(ALLOWED_GROUP_IDS)}`);
+
 if (!BOT_TOKEN || !MISTRAL_API_KEY) {
   console.error("Missing BOT_TOKEN or MISTRAL_API_KEY. Set them in your environment.");
   process.exit(1);
@@ -68,7 +72,12 @@ bot.on("message:text", async (ctx) => {
 
   try {
     const lower = msg.text.toLowerCase();
-    const hit = OTHER_MSGS.find((w) => lower.includes(w));
+    const hit = OTHER_MSGS.find((w) => {
+      if (!w) return false;
+      const found = lower.includes(w);
+      if (found) console.log(`[blocked-word] match: "${w}" in "${lower}"`);
+      return found;
+    });
 
     if (hit) {
       await ctx.deleteMessage();
